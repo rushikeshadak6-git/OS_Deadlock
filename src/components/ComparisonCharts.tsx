@@ -9,8 +9,6 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  ScatterChart,
-  Scatter,
 } from 'recharts';
 
 interface AlgorithmResult {
@@ -33,10 +31,10 @@ const ComparisonCharts = ({ results, isDarkMode }: ComparisonChartsProps) => {
 
   const metricsData = results.map((result) => ({
     name: result.name,
-    'Avg Waiting': result.avgWaitingTime.toFixed(2),
-    'Avg Turnaround': result.avgTurnaroundTime.toFixed(2),
-    'Total Time': result.totalTime,
-    'CPU Util %': result.cpuUtilization.toFixed(2),
+    'Avg Waiting': Number(result.avgWaitingTime),
+    'Avg Turnaround': Number(result.avgTurnaroundTime),
+    'Total Time': Number(result.totalTime),
+    'CPU Util %': Number(result.cpuUtilization),
   }));
 
   return (
@@ -49,10 +47,11 @@ const ComparisonCharts = ({ results, isDarkMode }: ComparisonChartsProps) => {
           <BarChart data={metricsData}>
             <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
             <XAxis dataKey="name" stroke={textColor} />
-            <YAxis stroke={textColor} />
+            <YAxis stroke={textColor} tickFormatter={(v) => v.toFixed(2)} />
             <Tooltip
               contentStyle={{ backgroundColor, borderColor: gridColor }}
               labelStyle={{ color: textColor }}
+              formatter={(value: any) => [Number(value).toFixed(2), 'Avg Waiting']}
             />
             <Legend />
             <Bar dataKey="Avg Waiting" fill="#3b82f6" />
@@ -68,10 +67,11 @@ const ComparisonCharts = ({ results, isDarkMode }: ComparisonChartsProps) => {
           <BarChart data={metricsData}>
             <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
             <XAxis dataKey="name" stroke={textColor} />
-            <YAxis stroke={textColor} />
+            <YAxis stroke={textColor} tickFormatter={(v) => v.toFixed(2)} />
             <Tooltip
               contentStyle={{ backgroundColor, borderColor: gridColor }}
               labelStyle={{ color: textColor }}
+              formatter={(value: any) => [Number(value).toFixed(2), 'Avg Turnaround']}
             />
             <Legend />
             <Bar dataKey="Avg Turnaround" fill="#8b5cf6" />
@@ -87,7 +87,7 @@ const ComparisonCharts = ({ results, isDarkMode }: ComparisonChartsProps) => {
           <LineChart data={metricsData}>
             <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
             <XAxis dataKey="name" stroke={textColor} />
-            <YAxis stroke={textColor} />
+            <YAxis stroke={textColor} tickFormatter={(v) => v.toFixed(2)} />
             <Tooltip
               contentStyle={{ backgroundColor, borderColor: gridColor }}
               labelStyle={{ color: textColor }}
@@ -111,32 +111,7 @@ const ComparisonCharts = ({ results, isDarkMode }: ComparisonChartsProps) => {
         </ResponsiveContainer>
       </div>
 
-      <div className={`p-6 rounded-lg ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
-        <h3 className={`text-xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-          Total Time vs CPU Utilization
-        </h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-            <XAxis
-              dataKey="Total Time"
-              name="Total Time (units)"
-              stroke={textColor}
-            />
-            <YAxis
-              dataKey="CPU Util %"
-              name="CPU Utilization (%)"
-              stroke={textColor}
-            />
-            <Tooltip
-              contentStyle={{ backgroundColor, borderColor: gridColor }}
-              labelStyle={{ color: textColor }}
-              cursor={{ strokeDasharray: '3 3' }}
-            />
-            <Scatter name="Algorithms" data={metricsData} fill="#f59e0b" />
-          </ScatterChart>
-        </ResponsiveContainer>
-      </div>
+      {/* Removed Total Time vs CPU Utilization chart per request */}
 
       <div className={`p-6 rounded-lg ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
         <h3 className={`text-xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>

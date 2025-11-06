@@ -101,41 +101,51 @@ const SchedulingSimulatorEnhanced = ({ isDarkMode }: SchedulingSimulatorEnhanced
     const priority = schedulePriority(processes);
     const rr = scheduleRoundRobin(processes, roundRobinQuantum);
 
+    const minArrival = processes.length ? Math.min(...processes.map((p) => p.arrivalTime)) : 0;
+    const makespan = (details: any[]) =>
+      details.length ? details[details.length - 1].completionTime - minArrival : 0;
+    const totalBurst = processes.reduce((sum, p) => sum + p.burstTime, 0);
+    const utilization = (details: any[]) => {
+      const span = makespan(details);
+      if (span <= 0) return 0;
+      return (totalBurst / span) * 100;
+    };
+
     const comparisonResults = [
       {
         name: 'FCFS',
         avgWaitingTime: fcfs.avgWaitingTime,
         avgTurnaroundTime: fcfs.avgTurnaroundTime,
         totalTime: fcfs.processDetails[fcfs.processDetails.length - 1]?.completionTime || 0,
-        cpuUtilization: 100,
+        cpuUtilization: utilization(fcfs.processDetails),
       },
       {
         name: 'SJF',
         avgWaitingTime: sjf.avgWaitingTime,
         avgTurnaroundTime: sjf.avgTurnaroundTime,
         totalTime: sjf.processDetails[sjf.processDetails.length - 1]?.completionTime || 0,
-        cpuUtilization: 100,
+        cpuUtilization: utilization(sjf.processDetails),
       },
       {
         name: 'LJF',
         avgWaitingTime: ljf.avgWaitingTime,
         avgTurnaroundTime: ljf.avgTurnaroundTime,
         totalTime: ljf.processDetails[ljf.processDetails.length - 1]?.completionTime || 0,
-        cpuUtilization: 100,
+        cpuUtilization: utilization(ljf.processDetails),
       },
       {
         name: 'Priority',
         avgWaitingTime: priority.avgWaitingTime,
         avgTurnaroundTime: priority.avgTurnaroundTime,
         totalTime: priority.processDetails[priority.processDetails.length - 1]?.completionTime || 0,
-        cpuUtilization: 100,
+        cpuUtilization: utilization(priority.processDetails),
       },
       {
         name: 'Round Robin',
         avgWaitingTime: rr.avgWaitingTime,
         avgTurnaroundTime: rr.avgTurnaroundTime,
         totalTime: rr.processDetails[rr.processDetails.length - 1]?.completionTime || 0,
-        cpuUtilization: 100,
+        cpuUtilization: utilization(rr.processDetails),
       },
     ];
 
@@ -215,6 +225,44 @@ const SchedulingSimulatorEnhanced = ({ isDarkMode }: SchedulingSimulatorEnhanced
             {selectedAlgorithm === 'Round Robin' &&
               `Round Robin - Each process gets ${roundRobinQuantum} time units per turn`}
           </p>
+        </div>
+
+        <div className={`mt-4 p-4 rounded-lg ${isDarkMode ? 'bg-slate-800/60' : 'bg-slate-100'}`}>
+          <h3 className={`text-lg font-semibold mb-2 ${textColor}`}>Algorithm & Math</h3>
+          <div className={`text-sm ${isDarkMode ? 'text-slate-300' : 'text-slate-700'} space-y-2`}>
+            <p>
+              Definitions: <span className="font-mono">WT = ST − AT</span>, <span className="font-mono">TAT = CT − AT</span>,
+              <span className="font-mono"> CT = ST + BT</span>. Here AT=arrival time, BT=burst time, ST=start time, CT=completion time, WT=waiting time, TAT=turnaround time.
+            </p>
+            {selectedAlgorithm === 'FCFS' && (
+              <p>
+                FCFS: sort by <span className="font-mono">AT</span>; for each process <span className="font-mono">ST = max(currentTime, AT)</span>, then
+                <span className="font-mono"> CT = ST + BT</span>, update <span className="font-mono">currentTime = CT</span>.
+              </p>
+            )}
+            {selectedAlgorithm === 'SJF' && (
+              <p>
+                Non-preemptive SJF: at each step choose available process with minimal <span className="font-mono">BT</span>. If none available,
+                jump <span className="font-mono">currentTime</span> to the next arrival.
+              </p>
+            )}
+            {selectedAlgorithm === 'LJF' && (
+              <p>
+                Non-preemptive LJF: at each step choose available process with maximal <span className="font-mono">BT</span>.
+              </p>
+            )}
+            {selectedAlgorithm === 'Priority' && (
+              <p>
+                Non-preemptive Priority: choose available process with the smallest priority number (highest priority). Ties broken by arrival.
+              </p>
+            )}
+            {selectedAlgorithm === 'Round Robin' && (
+              <p>
+                Round Robin: use time quantum <span className="font-mono">q = {roundRobinQuantum}</span>, rotate ready queue; each selected process executes for
+                <span className="font-mono"> min(q, remaining)</span> and rejoins the queue if unfinished.
+              </p>
+            )}
+          </div>
         </div>
       </div>
 

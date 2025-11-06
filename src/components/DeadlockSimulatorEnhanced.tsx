@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { RefreshCw, Play, AlertTriangle, CheckCircle2, Download } from 'lucide-react';
 import { detectDeadlock, SafeSequence } from '../utils/bankersAlgorithm';
 import ResourceAllocationGraph from './ResourceAllocationGraph';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 
 interface ProcessData {
   allocation: number[];
@@ -28,6 +29,9 @@ const DeadlockSimulatorEnhanced = ({ isDarkMode }: DeadlockSimulatorEnhancedProp
     safeSequences: SafeSequence[];
     optimalSequence: SafeSequence | null;
   } | null>(null);
+  const [showAllSequences, setShowAllSequences] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [animStep, setAnimStep] = useState(0);
 
   const bgColor = isDarkMode ? 'bg-slate-800/50' : 'bg-slate-100/50';
   const borderColor = isDarkMode ? 'border-slate-700' : 'border-slate-300';
@@ -50,12 +54,63 @@ const DeadlockSimulatorEnhanced = ({ isDarkMode }: DeadlockSimulatorEnhancedProp
     setAvailable(newAvailable);
     setProcesses(newProcesses);
     setResult(null);
+    setShowAllSequences(false);
+    setIsAnimating(false);
+    setAnimStep(0);
   };
 
   const handleDetectDeadlock = () => {
     const detectionResult = detectDeadlock(processes, available);
     setResult(detectionResult);
+    setIsAnimating(false);
+    setAnimStep(0);
   };
+
+  const startAnimation = () => {
+    if (!result?.optimalSequence) return;
+    setAnimStep(0);
+    setIsAnimating(true);
+  };
+
+  useEffect(() => {
+    if (!isAnimating || !result?.optimalSequence) return;
+    const totalSteps = result.optimalSequence.sequence.length;
+    if (animStep >= totalSteps) {
+      setIsAnimating(false);
+      return;
+    }
+    const id = setTimeout(() => setAnimStep((s) => s + 1), 800);
+    return () => clearTimeout(id);
+  }, [isAnimating, animStep, result]);
+
+  const sortedSequences = useMemo(() => {
+    if (!result?.safeSequences) return [] as SafeSequence[];
+    const seqs = [...result.safeSequences];
+    if (result.optimalSequence) {
+      const optimalKey = JSON.stringify(result.optimalSequence.sequence);
+      seqs.sort((a, b) => {
+        const aKey = JSON.stringify(a.sequence);
+        const bKey = JSON.stringify(b.sequence);
+        if (aKey === optimalKey && bKey !== optimalKey) return -1;
+        if (bKey === optimalKey && aKey !== optimalKey) return 1;
+        return 0;
+      });
+    }
+    return seqs;
+  }, [result]);
+
+  const comparisonData = useMemo(() => {
+    if (!result?.safeSequences) return [] as any[];
+    const setToCompare = showAllSequences ? sortedSequences : sortedSequences.slice(0, 8);
+    return setToCompare.map((seq, idx) => {
+      const isOptimal = result.optimalSequence && JSON.stringify(seq.sequence) === JSON.stringify(result.optimalSequence.sequence);
+      return {
+        name: isOptimal ? 'Optimal' : `Seq ${idx + 1}`,
+        avgWaiting: Number(seq.avgWaitingTime),
+        avgTAT: Number(seq.avgTurnaroundTime),
+      };
+    });
+  }, [result, showAllSequences, sortedSequences]);
 
   const updateProcessValue = (
     processIndex: number,
@@ -68,6 +123,7 @@ const DeadlockSimulatorEnhanced = ({ isDarkMode }: DeadlockSimulatorEnhancedProp
     newProcesses[processIndex][type][resourceIndex] = numValue;
     setProcesses(newProcesses);
     setResult(null);
+    setShowAllSequences(false);
   };
 
   const updateAvailable = (resourceIndex: number, value: string) => {
@@ -75,6 +131,7 @@ const DeadlockSimulatorEnhanced = ({ isDarkMode }: DeadlockSimulatorEnhancedProp
     newAvailable[resourceIndex] = parseInt(value) || 0;
     setAvailable(newAvailable);
     setResult(null);
+    setShowAllSequences(false);
   };
 
   const handleDimensionChange = (newProc: number, newRes: number) => {
@@ -217,6 +274,11 @@ const DeadlockSimulatorEnhanced = ({ isDarkMode }: DeadlockSimulatorEnhancedProp
             resources={available}
             isDarkMode={isDarkMode}
             hasDeadlock={!result.isSafe}
+            highlightedProcesses={
+              result.optimalSequence && (isAnimating || animStep > 0)
+                ? result.optimalSequence.sequence.slice(0, Math.min(animStep, result.optimalSequence.sequence.length))
+                : []
+            }
           />
         </div>
       )}
@@ -294,11 +356,53 @@ const DeadlockSimulatorEnhanced = ({ isDarkMode }: DeadlockSimulatorEnhancedProp
             All Safe Sequences: {result.safeSequences.length}
           </h2>
           <div className="space-y-4">
-            {result.safeSequences.slice(0, 5).map((seq, idx) => (
+            {result.optimalSequence && (
+              <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-slate-900/50' : 'bg-slate-200/70'} border ${borderColor}`}>
+                <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                  <h4 className={`text-lg font-semibold ${textColor}`}>Animate Optimal Safe Sequence</h4>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={startAnimation}
+                      disabled={isAnimating}
+                      className={`px-4 py-2 rounded-lg font-semibold ${isAnimating ? 'opacity-60 cursor-not-allowed' : ''} ${isDarkMode ? 'bg-green-600 text-white hover:bg-green-500' : 'bg-green-500 text-white hover:bg-green-600'}`}
+                    >
+                      {isAnimating ? 'Animating...' : 'Animate Optimal'}
+                    </button>
+                    {isAnimating && (
+                      <button
+                        onClick={() => setIsAnimating(false)}
+                        className={`${isDarkMode ? 'bg-red-600 text-white hover:bg-red-500' : 'bg-red-500 text-white hover:bg-red-600'} px-4 py-2 rounded-lg font-semibold`}
+                      >
+                        Stop
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {result.optimalSequence.sequence.map((p, i) => {
+                    const active = i < animStep;
+                    return (
+                      <span key={i} className={`${active ? 'bg-yellow-400 text-slate-900' : 'bg-blue-500 text-white'} px-3 py-1 rounded font-semibold`}>
+                        P{p}
+                      </span>
+                    );
+                  })}
+                </div>
+                <div className={`mt-3 h-2 rounded ${isDarkMode ? 'bg-slate-700' : 'bg-slate-300'}`}>
+                  <div
+                    className="h-2 rounded bg-yellow-400"
+                    style={{ width: `${(Math.min(animStep, result.optimalSequence.sequence.length) / result.optimalSequence.sequence.length) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+            {(showAllSequences ? sortedSequences : sortedSequences.slice(0, 5)).map((seq, idx) => (
               <div
                 key={idx}
                 className={`p-4 rounded-lg ${
-                  result.optimalSequence && seq === result.optimalSequence
+                  result.optimalSequence &&
+                  JSON.stringify(seq.sequence) ===
+                    JSON.stringify(result.optimalSequence.sequence)
                     ? isDarkMode
                       ? 'bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-2 border-yellow-400'
                       : 'bg-gradient-to-r from-yellow-500/30 to-orange-500/30 border-2 border-yellow-600'
@@ -323,9 +427,11 @@ const DeadlockSimulatorEnhanced = ({ isDarkMode }: DeadlockSimulatorEnhancedProp
                       ))}
                     </div>
                   </div>
-                  {result.optimalSequence && seq === result.optimalSequence && (
+                  {result.optimalSequence &&
+                    JSON.stringify(seq.sequence) ===
+                      JSON.stringify(result.optimalSequence.sequence) && (
                     <span className="px-3 py-1 bg-yellow-400 text-slate-900 rounded-lg font-bold text-sm">
-                      OPTIMAL
+                      OPTIMAL (Time Complexity)
                     </span>
                   )}
                 </div>
@@ -350,10 +456,73 @@ const DeadlockSimulatorEnhanced = ({ isDarkMode }: DeadlockSimulatorEnhancedProp
               </div>
             ))}
             {result.safeSequences.length > 5 && (
+              <div className="flex justify-center mt-2">
+                <button
+                  onClick={() => setShowAllSequences(!showAllSequences)}
+                  className={`px-4 py-2 rounded-lg font-semibold ${isDarkMode ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-200 text-slate-800 hover:bg-slate-300'}`}
+                >
+                  {showAllSequences ? 'Show Less' : `Show All (${result.safeSequences.length})`}
+                </button>
+              </div>
+            )}
+            {result.safeSequences.length > 5 && (
               <p className={`text-center ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
                 ... and {result.safeSequences.length - 5} more sequences
               </p>
             )}
+          </div>
+        </div>
+      )}
+
+      {result && result.isSafe && result.safeSequences.length > 0 && (
+        <div className={`${bgColor} backdrop-blur-sm rounded-xl p-6 border ${borderColor}`}>
+          <h2 className={`text-2xl font-bold ${textColor} mb-4`}>Sequence Metrics Comparison</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className={isDarkMode ? 'bg-slate-800 p-4 rounded-lg' : 'bg-slate-200 p-4 rounded-lg'}>
+              <h3 className={`text-lg font-semibold mb-3 ${textColor}`}>Average Waiting Time</h3>
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={comparisonData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#334155' : '#e2e8f0'} />
+                  <XAxis dataKey="name" stroke={isDarkMode ? '#cbd5e1' : '#475569'} />
+                  <YAxis stroke={isDarkMode ? '#cbd5e1' : '#475569'} tickFormatter={(v) => Number(v).toFixed(2)} />
+                  <Tooltip formatter={(v: any) => Number(v).toFixed(2)} />
+                  <Legend />
+                  <Bar dataKey="avgWaiting" name="Avg Waiting" fill="#3b82f6" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className={isDarkMode ? 'bg-slate-800 p-4 rounded-lg' : 'bg-slate-200 p-4 rounded-lg'}>
+              <h3 className={`text-lg font-semibold mb-3 ${textColor}`}>Average Turnaround Time</h3>
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={comparisonData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#334155' : '#e2e8f0'} />
+                  <XAxis dataKey="name" stroke={isDarkMode ? '#cbd5e1' : '#475569'} />
+                  <YAxis stroke={isDarkMode ? '#cbd5e1' : '#475569'} tickFormatter={(v) => Number(v).toFixed(2)} />
+                  <Tooltip formatter={(v: any) => Number(v).toFixed(2)} />
+                  <Legend />
+                  <Bar dataKey="avgTAT" name="Avg TAT" fill="#8b5cf6" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {result && result.isSafe && result.optimalSequence && (
+        <div className={`${bgColor} backdrop-blur-sm rounded-xl p-6 border ${borderColor}`}>
+          <h2 className={`text-2xl font-bold ${textColor} mb-4`}>Algorithm & Math (Optimality)</h2>
+          <div className={`text-sm ${isDarkMode ? 'text-slate-300' : 'text-slate-700'} space-y-3`}>
+            <p>
+              We enumerate safe sequences using the Banker's safety check. For each safe sequence
+              <span className="mx-1 font-mono">S = [p₁, p₂, …, pₙ]</span>, we measure per-process metrics treating remaining need as unit work.
+            </p>
+            <p className="font-mono">burstTime(pᵢ) = Σ need(pᵢ, r)</p>
+            <p className="font-mono">waitingTime(pᵢ) = Σ burstTime(pⱼ), for j &lt; i</p>
+            <p className="font-mono">turnaroundTime(pᵢ) = waitingTime(pᵢ) + burstTime(pᵢ)</p>
+            <p>
+              We select the optimal sequence by minimizing the total time complexity score
+              <span className="font-mono"> TC(S) = Σ turnaroundTime(pᵢ)</span>.
+            </p>
           </div>
         </div>
       )}

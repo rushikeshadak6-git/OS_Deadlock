@@ -17,6 +17,7 @@ export interface SafeSequence {
   avgBurstTime: number;
   avgWaitingTime: number;
   avgTurnaroundTime: number;
+  timeComplexityScore: number;
 }
 
 function calculateNeed(processes: ProcessData[]): number[][] {
@@ -73,9 +74,12 @@ function calculateSequenceMetrics(
   const need = calculateNeed(processes);
   let currentTime = 0;
   const processDetails: ProcessDetail[] = [];
+  let timeComplexityScore = 0; // sum of turnaround times as a proxy for time complexity
 
   sequence.forEach((procIdx, order) => {
-    const burstTime = need[procIdx].reduce((sum, val) => sum + val, 0) + 1;
+    // Treat the "work" for each process as the sum of its remaining need.
+    // This provides a consistent basis to compare sequences without adding arbitrary constants.
+    const burstTime = need[procIdx].reduce((sum, val) => sum + val, 0);
     const waitingTime = currentTime;
     const turnaroundTime = waitingTime + burstTime;
 
@@ -87,6 +91,7 @@ function calculateSequenceMetrics(
     });
 
     currentTime += burstTime;
+    timeComplexityScore += turnaroundTime;
   });
 
   const totalTime = currentTime;
@@ -105,6 +110,7 @@ function calculateSequenceMetrics(
     avgBurstTime,
     avgWaitingTime,
     avgTurnaroundTime,
+    timeComplexityScore,
   };
 }
 
@@ -131,7 +137,8 @@ export function detectDeadlock(
   );
 
   const optimalSequence = safeSequences.reduce((min, seq) =>
-    seq.totalTime < min.totalTime ? seq : min
+    // Choose the sequence that minimizes overall time complexity (sum of turnaround times)
+    seq.timeComplexityScore < min.timeComplexityScore ? seq : min
   );
 
   return {

@@ -25,6 +25,7 @@ interface ResourceAllocationGraphProps {
   resources: number[];
   isDarkMode: boolean;
   hasDeadlock: boolean;
+  highlightedProcesses?: number[];
 }
 
 const ResourceAllocationGraph = ({
@@ -32,6 +33,7 @@ const ResourceAllocationGraph = ({
   resources,
   isDarkMode,
   hasDeadlock,
+  highlightedProcesses = [],
 }: ResourceAllocationGraphProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -56,7 +58,7 @@ const ResourceAllocationGraph = ({
     const resourceCount = resources.length;
 
     const processRadius = 25;
-    const resourceRadius = 35;
+    const resourceRadius = 28; // make resource squares slightly smaller
 
     for (let i = 0; i < processCount; i++) {
       const angle = (i / processCount) * Math.PI * 2;
@@ -74,8 +76,8 @@ const ResourceAllocationGraph = ({
       nodes.push({
         id: `R${i}`,
         type: 'resource',
-        x: width / 2 + Math.cos(angle) * (height / 2.5),
-        y: height / 2 + Math.sin(angle) * (height / 2.5),
+        x: width / 2 + Math.cos(angle) * (height / 2.0), // place a bit farther than processes
+        y: height / 2 + Math.sin(angle) * (height / 2.0),
         radius: resourceRadius,
       });
     }
@@ -135,15 +137,21 @@ const ResourceAllocationGraph = ({
     });
 
     nodes.forEach((node) => {
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
-
       if (node.type === 'process') {
-        ctx.fillStyle = isDarkMode ? '#3b82f6' : '#2563eb';
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
+        const pid = parseInt(node.id.slice(1));
+        const isHighlighted = highlightedProcesses.includes(pid);
+        ctx.fillStyle = isHighlighted ? '#facc15' : isDarkMode ? '#3b82f6' : '#2563eb';
         ctx.fill();
-        ctx.strokeStyle = hasDeadlock ? '#ef4444' : '#60a5fa';
-        ctx.lineWidth = 3;
+        ctx.strokeStyle = isHighlighted ? '#f59e0b' : hasDeadlock ? '#ef4444' : '#60a5fa';
+        ctx.lineWidth = isHighlighted ? 5 : 3;
+        if (isHighlighted) {
+          ctx.shadowColor = '#fbbf24';
+          ctx.shadowBlur = 20;
+        }
         ctx.stroke();
+        ctx.shadowBlur = 0;
 
         ctx.fillStyle = isDarkMode ? '#ffffff' : '#ffffff';
         ctx.font = 'bold 14px Arial';
@@ -151,13 +159,17 @@ const ResourceAllocationGraph = ({
         ctx.textBaseline = 'middle';
         ctx.fillText(node.id, node.x, node.y);
       } else {
-        ctx.fillStyle = isDarkMode ? '#8b5cf6' : '#7c3aed';
-        ctx.fill();
-        ctx.strokeStyle = isDarkMode ? '#c4b5fd' : '#a78bfa';
-        ctx.lineWidth = 2;
-        ctx.stroke();
+        // Draw resource as a red square
+        const size = node.radius * 2;
+        const x = node.x - node.radius;
+        const y = node.y - node.radius;
+        ctx.fillStyle = '#ef4444'; // red fill
+        ctx.fillRect(x, y, size, size);
+        ctx.strokeStyle = '#b91c1c'; // darker red border
+        ctx.lineWidth = 3;
+        ctx.strokeRect(x, y, size, size);
 
-        ctx.fillStyle = isDarkMode ? '#ffffff' : '#ffffff';
+        ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 12px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
