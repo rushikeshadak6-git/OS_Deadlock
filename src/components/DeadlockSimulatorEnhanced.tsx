@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { RefreshCw, Play, AlertTriangle, CheckCircle2, Download } from 'lucide-react';
-import { detectDeadlock, SafeSequence } from '../utils/bankersAlgorithm';
+import { RefreshCw, Play, AlertTriangle, CheckCircle2, Download, Shield } from 'lucide-react';
+import { detectDeadlock, SafeSequence, suggestDeadlockAvoidance, AvoidanceResult } from '../utils/bankersAlgorithm';
 import ResourceAllocationGraph from './ResourceAllocationGraph';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 
@@ -32,6 +32,8 @@ const DeadlockSimulatorEnhanced = ({ isDarkMode }: DeadlockSimulatorEnhancedProp
   const [showAllSequences, setShowAllSequences] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const [animStep, setAnimStep] = useState(0);
+  const [avoidanceResult, setAvoidanceResult] = useState<AvoidanceResult | null>(null);
+  const [showAvoidance, setShowAvoidance] = useState(false);
 
   const bgColor = isDarkMode ? 'bg-slate-800/50' : 'bg-slate-100/50';
   const borderColor = isDarkMode ? 'border-slate-700' : 'border-slate-300';
@@ -57,6 +59,8 @@ const DeadlockSimulatorEnhanced = ({ isDarkMode }: DeadlockSimulatorEnhancedProp
     setShowAllSequences(false);
     setIsAnimating(false);
     setAnimStep(0);
+    setAvoidanceResult(null);
+    setShowAvoidance(false);
   };
 
   const handleDetectDeadlock = () => {
@@ -64,6 +68,44 @@ const DeadlockSimulatorEnhanced = ({ isDarkMode }: DeadlockSimulatorEnhancedProp
     setResult(detectionResult);
     setIsAnimating(false);
     setAnimStep(0);
+    setAvoidanceResult(null);
+    setShowAvoidance(false);
+  };
+
+  const handleAvoidDeadlock = () => {
+    if (!result || result.isSafe) return;
+
+    const avoidance = suggestDeadlockAvoidance(processes, available);
+    setAvoidanceResult(avoidance);
+    setShowAvoidance(true);
+  };
+
+  const applyAvoidance = () => {
+    if (!avoidanceResult) return;
+
+    setProcesses(avoidanceResult.newProcesses);
+    setAvailable(avoidanceResult.newAvailable);
+    setResult(null);
+    setAvoidanceResult(null);
+    setShowAvoidance(false);
+  };
+
+  const createDeadlockScenario = () => {
+    // Create a simple circular wait deadlock scenario
+    setNumProcesses(3);
+    setNumResources(3);
+    setAvailable([0, 0, 0]);
+    setProcesses([
+      { allocation: [1, 0, 0], max: [1, 1, 0] },
+      { allocation: [0, 1, 0], max: [1, 1, 0] },
+      { allocation: [0, 0, 1], max: [0, 1, 1] },
+    ]);
+    setResult(null);
+    setShowAllSequences(false);
+    setIsAnimating(false);
+    setAnimStep(0);
+    setAvoidanceResult(null);
+    setShowAvoidance(false);
   };
 
   const startAnimation = () => {
@@ -232,6 +274,13 @@ const DeadlockSimulatorEnhanced = ({ isDarkMode }: DeadlockSimulatorEnhancedProp
             Randomize
           </button>
           <button
+            onClick={createDeadlockScenario}
+            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-lg font-semibold hover:shadow-lg hover:shadow-red-500/50 transition-all duration-300"
+          >
+            <AlertTriangle className="w-5 h-5" />
+            Demo Deadlock
+          </button>
+          <button
             onClick={handleDetectDeadlock}
             className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg font-semibold hover:shadow-lg hover:shadow-green-500/50 transition-all duration-300"
           >
@@ -252,19 +301,30 @@ const DeadlockSimulatorEnhanced = ({ isDarkMode }: DeadlockSimulatorEnhancedProp
 
       {result && (
         <div className={`${bgColor} backdrop-blur-sm rounded-xl p-6 border ${result.isSafe ? 'border-green-500' : 'border-red-500'}`}>
-          <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-            {result.isSafe ? (
-              <>
-                <CheckCircle2 className="w-6 h-6 text-green-400" />
-                <span className={textColor}>System is in Safe State</span>
-              </>
-            ) : (
-              <>
-                <AlertTriangle className="w-6 h-6 text-red-400" />
-                <span className={textColor}>Deadlock Detected!</span>
-              </>
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+            <h3 className="text-xl font-bold flex items-center gap-2">
+              {result.isSafe ? (
+                <>
+                  <CheckCircle2 className="w-6 h-6 text-green-400" />
+                  <span className={textColor}>System is in Safe State</span>
+                </>
+              ) : (
+                <>
+                  <AlertTriangle className="w-6 h-6 text-red-400" />
+                  <span className={textColor}>Deadlock Detected!</span>
+                </>
+              )}
+            </h3>
+            {!result.isSafe && (
+              <button
+                onClick={handleAvoidDeadlock}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-lg font-semibold hover:shadow-lg hover:shadow-yellow-500/50 transition-all duration-300"
+              >
+                <Shield className="w-5 h-5" />
+                Avoid Deadlock
+              </button>
             )}
-          </h3>
+          </div>
           <ResourceAllocationGraph
             processes={processes.map((p, idx) => ({
               id: idx,
@@ -280,6 +340,134 @@ const DeadlockSimulatorEnhanced = ({ isDarkMode }: DeadlockSimulatorEnhancedProp
                 : []
             }
           />
+        </div>
+      )}
+
+      {showAvoidance && avoidanceResult && (
+        <div className={`${bgColor} backdrop-blur-sm rounded-xl p-6 border-2 ${isDarkMode ? 'border-yellow-500' : 'border-orange-500'}`}>
+          <div className="flex items-start justify-between mb-4 gap-3 flex-wrap">
+            <div>
+              <h3 className={`text-xl font-bold ${textColor} mb-2 flex items-center gap-2`}>
+                <Shield className="w-6 h-6 text-yellow-400" />
+                Deadlock Avoidance Suggestion
+              </h3>
+              <p className={`${isDarkMode ? 'text-slate-300' : 'text-slate-700'} text-sm`}>
+                The system detected a deadlock and found a way to avoid it.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowAvoidance(false)}
+              className={`px-3 py-1 rounded ${isDarkMode ? 'bg-slate-700 hover:bg-slate-600 text-slate-300' : 'bg-slate-300 hover:bg-slate-400 text-slate-700'} text-sm`}
+            >
+              Close
+            </button>
+          </div>
+
+          <div className={`p-4 rounded-lg mb-4 ${isDarkMode ? 'bg-yellow-500/10 border border-yellow-500/30' : 'bg-orange-500/10 border border-orange-500/30'}`}>
+            <h4 className={`font-semibold ${isDarkMode ? 'text-yellow-300' : 'text-orange-700'} mb-2`}>
+              Suggested Action:
+            </h4>
+            <p className={`${isDarkMode ? 'text-yellow-100' : 'text-orange-900'} text-sm mb-3`}>
+              {avoidanceResult.strategy.description}
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+              <div className={`p-3 rounded ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`}>
+                <div className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'} mb-1`}>Strategy Type</div>
+                <div className={`font-semibold ${textColor}`}>
+                  {avoidanceResult.strategy.type === 'reduce_allocation' && 'Reduce Allocation'}
+                  {avoidanceResult.strategy.type === 'increase_resources' && 'Increase Resources'}
+                  {avoidanceResult.strategy.type === 'reduce_max' && 'Reduce Maximum Need'}
+                </div>
+              </div>
+              <div className={`p-3 rounded ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`}>
+                <div className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'} mb-1`}>Change</div>
+                <div className={`font-semibold ${textColor}`}>
+                  {avoidanceResult.strategy.originalValue} → {avoidanceResult.strategy.suggestedValue}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className={`p-4 rounded-lg mb-4 ${isDarkMode ? 'bg-green-500/10 border border-green-500/30' : 'bg-green-500/10 border border-green-500/30'}`}>
+            <h4 className={`font-semibold ${isDarkMode ? 'text-green-300' : 'text-green-700'} mb-2 flex items-center gap-2`}>
+              <CheckCircle2 className="w-5 h-5" />
+              Safe Sequence After Avoidance:
+            </h4>
+            <div className="flex items-center gap-2 flex-wrap mb-3">
+              {avoidanceResult.safeSequence.sequence.map((p, i) => (
+                <span key={i}>
+                  <span className="px-3 py-1 bg-green-500 text-white rounded text-sm font-semibold">
+                    P{p}
+                  </span>
+                  {i < avoidanceResult.safeSequence.sequence.length - 1 && (
+                    <span className={`mx-1 ${isDarkMode ? 'text-green-300' : 'text-green-600'}`}>→</span>
+                  )}
+                </span>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+              <div className={`p-2 rounded ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`}>
+                <div className={`${isDarkMode ? 'text-slate-400' : 'text-slate-600'} text-xs`}>Total Time</div>
+                <div className={`${textColor} font-bold`}>{avoidanceResult.safeSequence.totalTime}</div>
+              </div>
+              <div className={`p-2 rounded ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`}>
+                <div className={`${isDarkMode ? 'text-slate-400' : 'text-slate-600'} text-xs`}>Avg Waiting</div>
+                <div className={`${textColor} font-bold`}>{avoidanceResult.safeSequence.avgWaitingTime.toFixed(2)}</div>
+              </div>
+              <div className={`p-2 rounded ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`}>
+                <div className={`${isDarkMode ? 'text-slate-400' : 'text-slate-600'} text-xs`}>Avg Burst</div>
+                <div className={`${textColor} font-bold`}>{avoidanceResult.safeSequence.avgBurstTime.toFixed(2)}</div>
+              </div>
+              <div className={`p-2 rounded ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`}>
+                <div className={`${isDarkMode ? 'text-slate-400' : 'text-slate-600'} text-xs`}>Avg TAT</div>
+                <div className={`${textColor} font-bold`}>{avoidanceResult.safeSequence.avgTurnaroundTime.toFixed(2)}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3 flex-wrap">
+            <button
+              onClick={applyAvoidance}
+              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg font-semibold hover:shadow-lg hover:shadow-green-500/50 transition-all duration-300"
+            >
+              <CheckCircle2 className="w-5 h-5" />
+              Apply This Solution
+            </button>
+            <button
+              onClick={() => setShowAvoidance(false)}
+              className={`px-6 py-3 rounded-lg font-semibold ${isDarkMode ? 'bg-slate-700 hover:bg-slate-600 text-slate-300' : 'bg-slate-300 hover:bg-slate-400 text-slate-700'}`}
+            >
+              Keep Current State
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showAvoidance && !avoidanceResult && (
+        <div className={`${bgColor} backdrop-blur-sm rounded-xl p-6 border-2 ${isDarkMode ? 'border-red-500' : 'border-red-600'}`}>
+          <div className="flex items-center gap-3 mb-3">
+            <AlertTriangle className="w-6 h-6 text-red-400" />
+            <h3 className={`text-xl font-bold ${textColor}`}>
+              No Automatic Avoidance Found
+            </h3>
+          </div>
+          <p className={`${isDarkMode ? 'text-slate-300' : 'text-slate-700'} mb-4`}>
+            The system could not find a simple automatic solution to avoid this deadlock.
+            Manual intervention is required. Consider:
+          </p>
+          <ul className={`list-disc list-inside space-y-2 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'} text-sm`}>
+            <li>Increasing available resources significantly</li>
+            <li>Reducing maximum needs for multiple processes</li>
+            <li>Releasing allocated resources from processes</li>
+            <li>Restarting one or more processes</li>
+          </ul>
+          <button
+            onClick={() => setShowAvoidance(false)}
+            className={`mt-4 px-4 py-2 rounded-lg ${isDarkMode ? 'bg-slate-700 hover:bg-slate-600 text-slate-300' : 'bg-slate-300 hover:bg-slate-400 text-slate-700'}`}
+          >
+            Close
+          </button>
         </div>
       )}
 

@@ -114,6 +114,22 @@ function calculateSequenceMetrics(
   };
 }
 
+export interface AvoidanceStrategy {
+  type: 'reduce_allocation' | 'increase_resources' | 'reduce_max';
+  processId: number;
+  resourceId: number;
+  originalValue: number;
+  suggestedValue: number;
+  description: string;
+}
+
+export interface AvoidanceResult {
+  strategy: AvoidanceStrategy;
+  newProcesses: ProcessData[];
+  newAvailable: number[];
+  safeSequence: SafeSequence;
+}
+
 export function detectDeadlock(
   processes: ProcessData[],
   available: number[]
@@ -146,4 +162,96 @@ export function detectDeadlock(
     safeSequences,
     optimalSequence,
   };
+}
+
+export function suggestDeadlockAvoidance(
+  processes: ProcessData[],
+  available: number[]
+): AvoidanceResult | null {
+  const need = calculateNeed(processes);
+
+  // Strategy 1: Try reducing allocation for processes with high allocation
+  for (let i = 0; i < processes.length; i++) {
+    for (let r = 0; r < available.length; r++) {
+      if (processes[i].allocation[r] > 0) {
+        const newProcesses = JSON.parse(JSON.stringify(processes)) as ProcessData[];
+        const newAvailable = [...available];
+
+        // Reduce allocation by 1
+        newProcesses[i].allocation[r] -= 1;
+        newAvailable[r] += 1;
+
+        const result = detectDeadlock(newProcesses, newAvailable);
+        if (result.isSafe && result.optimalSequence) {
+          return {
+            strategy: {
+              type: 'reduce_allocation',
+              processId: i,
+              resourceId: r,
+              originalValue: processes[i].allocation[r],
+              suggestedValue: processes[i].allocation[r] - 1,
+              description: `Reduce allocation of R${r} for P${i} from ${processes[i].allocation[r]} to ${processes[i].allocation[r] - 1}`,
+            },
+            newProcesses,
+            newAvailable,
+            safeSequence: result.optimalSequence,
+          };
+        }
+      }
+    }
+  }
+
+  // Strategy 2: Try increasing available resources
+  for (let r = 0; r < available.length; r++) {
+    const newAvailable = [...available];
+    newAvailable[r] += 1;
+
+    const result = detectDeadlock(processes, newAvailable);
+    if (result.isSafe && result.optimalSequence) {
+      return {
+        strategy: {
+          type: 'increase_resources',
+          processId: -1,
+          resourceId: r,
+          originalValue: available[r],
+          suggestedValue: available[r] + 1,
+          description: `Increase available R${r} from ${available[r]} to ${available[r] + 1}`,
+        },
+        newProcesses: processes,
+        newAvailable,
+        safeSequence: result.optimalSequence,
+      };
+    }
+  }
+
+  // Strategy 3: Try reducing maximum need for processes
+  for (let i = 0; i < processes.length; i++) {
+    for (let r = 0; r < available.length; r++) {
+      if (processes[i].max[r] > processes[i].allocation[r]) {
+        const newProcesses = JSON.parse(JSON.stringify(processes)) as ProcessData[];
+
+        // Reduce max by 1 (but not below current allocation)
+        newProcesses[i].max[r] -= 1;
+
+        const result = detectDeadlock(newProcesses, available);
+        if (result.isSafe && result.optimalSequence) {
+          return {
+            strategy: {
+              type: 'reduce_max',
+              processId: i,
+              resourceId: r,
+              originalValue: processes[i].max[r],
+              suggestedValue: processes[i].max[r] - 1,
+              description: `Reduce maximum need of R${r} for P${i} from ${processes[i].max[r]} to ${processes[i].max[r] - 1}`,
+            },
+            newProcesses,
+            newAvailable: available,
+            safeSequence: result.optimalSequence,
+          };
+        }
+      }
+    }
+  }
+
+  return null;
 }
